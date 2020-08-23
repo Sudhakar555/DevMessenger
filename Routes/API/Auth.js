@@ -3,6 +3,9 @@ const router = express.Router();
 const auth = require('../../middleware/auth')
 const User = require('../../models/Users')
 const { check,validationResult }= require('express-validator')
+const jwt = require('jsonwebtoken')
+const bcrypt = require('bcryptjs')
+const config = require('config')
 
 //@route Post api/auth
 //@desc  Authenticate USer & Get Token
@@ -20,11 +23,9 @@ router.get('/', auth, async (req, res) => {
 );
 
 router.post('/',[
-    check('name','Name is Required!!').  //validations for each field
-    not().
-    isEmpty(),
+    
     check('email','Provide Only Valid Emails!!').isEmail(),
-    check('password','Password must be min 8 char long, At least one uppercase,   At least one lower case,').matches(/^(?=.*\d)(?=.*[a-z])(?=.*[A-Z])[0-9a-zA-Z]{8,}$/, "i")
+    check('password','Password Required').exists()
  ], 
  async (req, res) => {
      const errors=validationResult(req) ;
@@ -32,36 +33,23 @@ router.post('/',[
        return res.status(400).json({errors:errors.array()})
      }
  
-     const {name, email, password} = req.body;
+     const {email, password} = req.body;
      try{
        //Check User Exists
      let user = await User.findOne({email}) //based on what document should be retrieved
  
-     if(user){
-      return res.status(400).json({ errors : [{ msg:" User Already Exists!!"}]})
+     if(!user){
+      return res.status(400).json({ errors : [{ msg:"Invalid Credentials!!"}]})
      }
-       //gravatar
- 
-       const avatar = gravatar.url(email, {
-         s:'200',//size
-         r:'pg',//rating
-         d:'mm'//default
-       })
-  
+      //Password Comparison
+
+      const isMatching = await bcrypt.compare(password, user.password)
+       
+     if(!isMatching){
+      return res.status(400).json({ errors : [{ msg:"Invalid Credentials!!"}]})
+     }
      //Instance of user Object
-     user = new User({
-       name,email,avatar,password
-     })
-   
-    //Password Encryption
-     const salt = await bcrypt.genSalt(10); //generating salt
- 
-     user.password = await bcrypt.hash(password,salt) //hashing
- 
-     await user.save();
- 
-    //jsonwebtoken
- 
+    
     const payload= {
       user : {
          id:user.id
